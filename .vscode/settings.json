@@ -1,0 +1,11 @@
+{
+    "bitburner.authToken": "/G5VGqg0+thT8GHgEvx8fAzDGRDasnpyIjCTMtIZWQHMtnYul8iv5gYkU10vM/i2",
+    "bitburner.fileWatcher.enable": true,
+    "bitburner.showPushSuccessNotification": true,
+    "bitburner.scriptRoot": "./scripts",
+    "files.associations": {
+        "*.ns": "javascript",
+        "*.script": "javascript"
+    },
+    "js/ts.implicitProjectConfig.checkJs": true,
+}

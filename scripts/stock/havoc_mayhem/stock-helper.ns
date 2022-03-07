@@ -1,0 +1,81 @@
+// https://www.reddit.com/r/Bitburner/comments/a3oxvm/a_very_simple_stock_market_script/
+
+//Requires access to the TIX API
+//Requires access to SF8:L2 to be able to short stocks
+
+const flipThresh = 0.5 / 100; //i.e. flip on retracement of 0.5%
+const reBuyThresh = 2 / 100; //i.e. rebuy short positions on move of 2%
+const commission = 100000;
+
+function refresh(ns, stocks, myStocks) {
+    for (const sym in stocks) {
+        let s = stocks[sym];
+        s.shares = ns.getStockPosition(s.sym)[0];
+        s.sharesShort = ns.getStockPosition(s.sym)[2];
+        if ((s.shares + s.sharesShort) > 0) {
+            let x = myStocks[s.sym];
+            if (x === undefined) {
+                x = { sym: s.sym };
+                x.maxPrice = 0;
+                x.minPrice = 1e25;
+                myStocks[s.sym] = x;
+            }
+            x.shares = s.shares;
+            x.sharesShort = s.sharesShort;
+            x.price = ns.getStockPrice(x.sym);
+            if (x.minPrice > x.price) x.minPrice = x.price;
+            if (x.maxPrice < x.price) x.maxPrice = x.price;
+        }
+        else
+            delete myStocks[s.sym];
+    }
+}
+
+function flipLtoS(ns, x) {
+    ns.print(`Flipping ${x.sym} to Short`);
+    ns.sellStock(x.sym, x.shares);
+    x.minPrice = x.price;
+    let numShares = Math.floor((ns.getServerMoneyAvailable("home") - commission) / x.price);
+    ns.shortStock(x.sym, numShares);
+}
+
+function flipStoL(ns, x) {
+    ns.print(`Flipping ${x.sym} to Long`);
+    ns.sellShort(x.sym, x.sharesShort);
+    x.maxPrice = x.price;
+    let numShares = Math.floor((ns.getServerMoneyAvailable("home") - commission) / x.price);
+    ns.buyStock(x.sym, numShares);
+}
+
+function rebuyShort(ns, x) {
+    ns.print(`Rebuying short position for ${x.sym}`);
+    ns.sellShort(x.sym, x.sharesShort);
+    x.maxPrice = x.price;
+    let numShares = Math.floor((ns.getServerMoneyAvailable("home") - commission) / x.price);
+    ns.shortStock(x.sym, numShares);
+}
+
+export async function main(ns) {
+    let stocks = {};
+    let myStocks = {};
+    ns.disableLog("sleep");
+
+    for (const symbol of ns.getStockSymbols())
+        stocks[symbol] = { sym: symbol };
+
+    while (true) {
+        refresh(ns, stocks, myStocks);
+
+        for (const sym in myStocks) {
+            let x = myStocks[sym];
+            if ((x.shares > 0) && (x.price < ((1 - flipThresh) * x.maxPrice)))
+                flipLtoS(ns, x);
+            if ((x.sharesShort > 0) && (x.price > ((1 + flipThresh) * x.minPrice)))
+                flipStoL(ns, x);
+            else if ((x.sharesShort > 0) && (x.price < ((1 - flipThresh) * x.maxPrice)))
+                rebuyShort(ns, x);
+        }
+
+        await ns.sleep(6 * 1000);
+    }
+}
